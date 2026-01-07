@@ -326,6 +326,63 @@ hey -n 10000 -c 50 \
 
 Contributions are welcome! Please read our contributing guidelines before submitting PRs.
 
+### Branch Strategy
+
+We follow a structured branching model:
+
+| Branch | Purpose | Base | Merge To |
+|--------|---------|------|----------|
+| `main` | Production-ready code | - | - |
+| `develop` | Integration branch | `main` | `main` |
+| `feature/*` | New features | `develop` | `develop` |
+| `fix/*` | Bug fixes | `develop` | `develop` |
+| `hotfix/*` | Urgent production fixes | `main` | `main` + `develop` |
+| `release/*` | Release preparation | `develop` | `main` + `develop` |
+
+**Branch Naming Convention:**
+
+```
+feature/add-grpc-support
+feature/expr-cache
+fix/parser-escape-chars
+fix/memory-leak-in-eval
+hotfix/critical-security-patch
+release/v0.2.0
+```
+
+**Workflow:**
+
+1. **Feature Development**
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b feature/your-feature-name
+   # ... make changes ...
+   git push origin feature/your-feature-name
+   # Create PR to develop
+   ```
+
+2. **Bug Fixes**
+   ```bash
+   git checkout develop
+   git checkout -b fix/bug-description
+   # ... fix the bug ...
+   git push origin fix/bug-description
+   # Create PR to develop
+   ```
+
+3. **Releases**
+   ```bash
+   git checkout develop
+   git checkout -b release/vX.Y.Z
+   # ... version bump, changelog ...
+   # Create PR to main AND develop
+   ```
+
+**Protected Branches:**
+- `main` - Requires PR review, passing CI, no direct pushes
+- `develop` - Requires PR review, passing CI
+
 ---
 
 ## License

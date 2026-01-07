@@ -1,0 +1,43 @@
+# Build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Internal documentation (not for public)
+/docs/
+
+# Debug files
+*.log
+*.trace
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Benchmark raw data (reports are kept)
+/target/criterion/
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+
+# PSD source files
+*.psd
+

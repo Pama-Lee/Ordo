@@ -27,8 +27,12 @@ impl RuleStore {
     pub fn put(&mut self, ruleset: RuleSet) -> Result<(), Vec<String>> {
         // Validate before storing
         ruleset.validate()?;
-        let name = ruleset.config.name.clone();
-        self.rulesets.insert(name, Arc::new(ruleset));
+
+        // Compile expressions for better performance
+        let compiled = ruleset.compile().map_err(|e| vec![e.to_string()])?;
+
+        let name = compiled.config.name.clone();
+        self.rulesets.insert(name, Arc::new(compiled));
         Ok(())
     }
 

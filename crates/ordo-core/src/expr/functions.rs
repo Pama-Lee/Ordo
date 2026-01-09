@@ -94,13 +94,31 @@ impl FunctionRegistry {
                 });
             }
             let s = require_string("substring", &args[0])?;
-            let start = require_int("substring", &args[1])? as usize;
-            let end = if args.len() == 3 {
-                require_int("substring", &args[2])? as usize
+            let start_i64 = require_int("substring", &args[1])?;
+            let char_count = s.chars().count();
+
+            // Handle negative start index (treat as 0)
+            let start = if start_i64 < 0 {
+                0
             } else {
-                s.len()
+                (start_i64 as usize).min(char_count)
             };
-            let result: String = s.chars().skip(start).take(end - start).collect();
+
+            let end = if args.len() == 3 {
+                let end_i64 = require_int("substring", &args[2])?;
+                // Handle negative end index (treat as 0)
+                if end_i64 < 0 {
+                    0
+                } else {
+                    (end_i64 as usize).min(char_count)
+                }
+            } else {
+                char_count
+            };
+
+            // Handle start > end case (return empty string)
+            let take_count = end.saturating_sub(start);
+            let result: String = s.chars().skip(start).take(take_count).collect();
             Ok(Value::string(result))
         });
 

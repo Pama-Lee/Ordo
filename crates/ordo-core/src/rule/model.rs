@@ -138,6 +138,34 @@ impl RuleSet {
         }
     }
 
+    /// Compile all expression strings into parsed AST for better performance.
+    /// This should be called once after loading a RuleSet to avoid
+    /// re-parsing expressions on every evaluation.
+    ///
+    /// Returns a new compiled RuleSet or an error if any expression fails to parse.
+    pub fn compile(&self) -> crate::error::Result<Self> {
+        use super::step::StepKind;
+
+        let mut compiled = self.clone();
+
+        for step in compiled.steps.values_mut() {
+            match &mut step.kind {
+                StepKind::Decision { branches, .. } => {
+                    for branch in branches {
+                        if branch.condition.needs_compilation() {
+                            branch.condition = branch.condition.compile()?;
+                        }
+                    }
+                }
+                StepKind::Action { .. } | StepKind::Terminal { .. } => {
+                    // No conditions to compile
+                }
+            }
+        }
+
+        Ok(compiled)
+    }
+
     /// Load from JSON string
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
@@ -146,6 +174,28 @@ impl RuleSet {
     /// Load from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self, serde_yaml::Error> {
         serde_yaml::from_str(yaml)
+    }
+
+    /// Load from JSON string and compile expressions
+    pub fn from_json_compiled(json: &str) -> crate::error::Result<Self> {
+        let ruleset: Self = serde_json::from_str(json).map_err(|e| {
+            crate::error::OrdoError::ParseError {
+                message: e.to_string(),
+                location: None,
+            }
+        })?;
+        ruleset.compile()
+    }
+
+    /// Load from YAML string and compile expressions
+    pub fn from_yaml_compiled(yaml: &str) -> crate::error::Result<Self> {
+        let ruleset: Self = serde_yaml::from_str(yaml).map_err(|e| {
+            crate::error::OrdoError::ParseError {
+                message: e.to_string(),
+                location: None,
+            }
+        })?;
+        ruleset.compile()
     }
 
     /// Serialize to JSON

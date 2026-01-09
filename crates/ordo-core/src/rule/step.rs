@@ -198,6 +198,24 @@ impl Condition {
     pub fn from_string(s: impl Into<String>) -> Self {
         Self::ExpressionString(s.into())
     }
+
+    /// Compile expression strings into parsed expressions for better performance.
+    /// Returns the compiled condition, or an error if parsing fails.
+    pub fn compile(&self) -> Result<Self, crate::error::OrdoError> {
+        match self {
+            Self::ExpressionString(s) => {
+                let expr = crate::expr::ExprParser::parse(s)?;
+                Ok(Self::Expression(expr))
+            }
+            // Already compiled or doesn't need compilation
+            other => Ok(other.clone()),
+        }
+    }
+
+    /// Check if this condition needs compilation
+    pub fn needs_compilation(&self) -> bool {
+        matches!(self, Self::ExpressionString(_))
+    }
 }
 
 /// Action to perform

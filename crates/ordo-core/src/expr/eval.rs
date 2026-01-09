@@ -233,10 +233,10 @@ impl Evaluator {
     fn eval_div(&self, left: &Value, right: &Value) -> Result<Value> {
         match (left, right) {
             (Value::Int(a), Value::Int(b)) => {
-                if *b == 0 {
-                    return Err(OrdoError::eval_error("Division by zero"));
-                }
-                Ok(Value::int(a / b))
+                // checked_div handles both division by zero AND i64::MIN / -1 overflow
+                a.checked_div(*b)
+                    .map(Value::int)
+                    .ok_or_else(|| OrdoError::eval_error("Division by zero or overflow"))
             }
             (Value::Float(a), Value::Float(b)) => {
                 if *b == 0.0 {
@@ -267,10 +267,10 @@ impl Evaluator {
     fn eval_mod(&self, left: &Value, right: &Value) -> Result<Value> {
         match (left, right) {
             (Value::Int(a), Value::Int(b)) => {
-                if *b == 0 {
-                    return Err(OrdoError::eval_error("Modulo by zero"));
-                }
-                Ok(Value::int(a % b))
+                // checked_rem handles both modulo by zero AND i64::MIN % -1 overflow
+                a.checked_rem(*b)
+                    .map(Value::int)
+                    .ok_or_else(|| OrdoError::eval_error("Modulo by zero or overflow"))
             }
             _ => Err(OrdoError::eval_error(format!(
                 "Cannot modulo {} and {}",

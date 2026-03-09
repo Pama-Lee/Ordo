@@ -13,14 +13,10 @@ targets = []
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 
-# Deny crates with known security vulnerabilities
-vulnerability = "deny"
 # Warn on unmaintained crates (not deny, to avoid blocking on inactive-but-safe deps)
 unmaintained = "none"
 # Warn on crates that have been yanked
 yanked = "warn"
-# Warn on crates with security notices (informational advisories)
-notice = "warn"
 
 # ------------------------------------------------------------------------
 # License checks
@@ -42,16 +38,6 @@ allow = [
     "Zlib",
     "CC0-1.0",
     "OpenSSL",
-]
-
-# Deny GPL and other copyleft licenses
-deny = [
-    "GPL-2.0",
-    "GPL-3.0",
-    "LGPL-2.0",
-    "LGPL-2.1",
-    "LGPL-3.0",
-    "AGPL-3.0",
 ]
 
 # ------------------------------------------------------------------------

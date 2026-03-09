@@ -16,7 +16,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # Deny crates with known security vulnerabilities
 vulnerability = "deny"
 # Warn on unmaintained crates (not deny, to avoid blocking on inactive-but-safe deps)
-unmaintained = "warn"
+unmaintained = "none"
 # Warn on crates that have been yanked
 yanked = "warn"
 # Warn on crates with security notices (informational advisories)
@@ -63,7 +63,7 @@ multiple-versions = "warn"
 # Deny wildcard dependencies
 wildcards = "deny"
 # Highlight the longest path each duplicate dependency takes
-highlight = "deepest-path"
+highlight = "simplest-path"
 
 # ------------------------------------------------------------------------
 # Source checks

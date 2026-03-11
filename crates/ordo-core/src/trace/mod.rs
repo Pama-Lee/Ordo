@@ -2,9 +2,9 @@
 //!
 //! Provides execution tracing for debugging and monitoring
 
-use crate::context::Value;
+use crate::context::{IString, Value};
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Trace configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -171,7 +171,8 @@ pub struct StepTrace {
 
     /// Variables snapshot (if captured)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub variables_snapshot: Option<HashMap<String, Value>>,
+    #[serde(with = "variables_serde")]
+    pub variables_snapshot: Option<HashMap<IString, Value>>,
 
     /// Next step ID (if continued)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -250,6 +251,48 @@ fn generate_trace_id() -> String {
     let random: u32 = (nanos % 0xFFFFFFFF) as u32;
 
     format!("{:016x}{:08x}", nanos as u64, random)
+}
+
+mod variables_serde {
+    use crate::context::{IString, Value};
+    use hashbrown::HashMap;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::sync::Arc;
+
+    pub fn serialize<S>(
+        variables: &Option<HashMap<IString, Value>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match variables {
+            Some(map) => {
+                let string_map: std::collections::HashMap<&str, &Value> =
+                    map.iter().map(|(k, v)| (k.as_ref(), v)).collect();
+                string_map.serialize(serializer)
+            }
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<HashMap<IString, Value>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt_map: Option<std::collections::HashMap<String, Value>> =
+            Option::deserialize(deserializer)?;
+        match opt_map {
+            Some(map) => {
+                let mut hashbrown_map = HashMap::with_capacity(map.len());
+                for (k, v) in map {
+                    hashbrown_map.insert(Arc::from(k), v);
+                }
+                Ok(Some(hashbrown_map))
+            }
+            None => Ok(None),
+        }
+    }
 }
 
 /// Generate a unique trace ID (WASM version)

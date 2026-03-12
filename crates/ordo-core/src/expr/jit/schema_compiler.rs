@@ -116,7 +116,8 @@ pub struct SchemaJITCompiler {
 }
 
 /// A thread-safe cache for compiled functions
-pub type SchemaJITCache = dashmap::DashMap<(u64, String), SchemaCompiledFunction>;
+pub type SchemaJITCache =
+    dashmap::DashMap<u64, SchemaCompiledFunction, hashbrown::hash_map::DefaultHashBuilder>;
 
 /// JIT compilation statistics
 #[derive(Debug, Default, Clone)]
@@ -268,9 +269,8 @@ impl SchemaJITCompiler {
         schema: &MessageSchema,
         cache: &SchemaJITCache,
     ) -> Result<SchemaCompiledFunction> {
-        let key = (hash, schema.name.clone());
-        if let Some(compiled) = cache.get(&key) {
-            return Ok(compiled.clone());
+        if let Some(compiled) = cache.get(&hash) {
+            return Ok(compiled.value().clone());
         }
 
         let start = std::time::Instant::now();
@@ -378,7 +378,7 @@ impl SchemaJITCompiler {
         self.stats.schema_compiles += 1;
         self.stats.total_compile_time_ns += duration.as_nanos() as u64;
 
-        cache.insert(key.clone(), compiled.clone());
+        cache.insert(hash, compiled.clone());
 
         Ok(compiled)
     }

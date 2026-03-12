@@ -111,7 +111,9 @@ impl SchemaJITEvaluator {
 
         Ok(Self {
             compiler: Mutex::new(compiler),
-            jit_cache: Arc::new(dashmap::DashMap::new()),
+            jit_cache: Arc::new(dashmap::DashMap::with_hasher(
+                hashbrown::hash_map::DefaultHashBuilder::default(),
+            )),
             evaluator: Evaluator::new(),
             vm: BytecodeVM::new(),
             optimizer: Mutex::new(ExprOptimizer::new()),
@@ -147,7 +149,7 @@ impl SchemaJITEvaluator {
         let start = Instant::now();
 
         // Try to get cached JIT function (lock-free fast path)
-        if let Some(compiled) = self.jit_cache.get(&(hash, schema.name.clone())) {
+        if let Some(compiled) = self.jit_cache.get(&hash) {
             let result = unsafe { compiled.call_typed_value(ctx) };
             if self.config.enable_profiling {
                 self.profiler.record_expr(hash, start.elapsed());

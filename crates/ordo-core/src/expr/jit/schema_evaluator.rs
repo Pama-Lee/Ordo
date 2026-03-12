@@ -146,10 +146,11 @@ impl SchemaJITEvaluator {
     pub fn eval_typed<C: TypedContext>(&self, expr: &Expr, ctx: &C) -> Result<Value> {
         let schema = C::schema();
         let hash = self.hash_expr_with_schema(expr, schema);
+        let schema_hash = hash; // `hash_expr_with_schema` already hashes the schema prefix
         let start = Instant::now();
 
         // Try to get cached JIT function (lock-free fast path)
-        if let Some(compiled) = self.jit_cache.get(&hash) {
+        if let Some(compiled) = self.jit_cache.get(&schema_hash) {
             let result = unsafe { compiled.call_typed_value(ctx) };
             if self.config.enable_profiling {
                 self.profiler.record_expr(hash, start.elapsed());

@@ -265,11 +265,13 @@ impl SchemaJITCompiler {
     pub fn compile_with_schema(
         &mut self,
         expr: &Expr,
-        hash: u64,
+        _raw_hash: u64, // retained for backward compatibility with calling signature
         schema: &MessageSchema,
         cache: &SchemaJITCache,
     ) -> Result<SchemaCompiledFunction> {
-        if let Some(compiled) = cache.get(&hash) {
+        let schema_hash = crate::expr::hash_expr(&format!("{}:{:?}", schema.name, expr));
+
+        if let Some(compiled) = cache.get(&schema_hash) {
             return Ok(compiled.value().clone());
         }
 
@@ -304,7 +306,7 @@ impl SchemaJITCompiler {
         sig.returns.push(AbiParam::new(types::I32)); // error code
 
         // Declare function
-        let func_name = format!("schema_jit_{}_{}", schema.name, hash);
+        let func_name = format!("schema_jit_{}_{}", schema.name, schema_hash);
         let func_id = self
             .module
             .declare_function(&func_name, Linkage::Local, &sig)
@@ -367,7 +369,7 @@ impl SchemaJITCompiler {
 
         let compiled = SchemaCompiledFunction {
             func_ptr,
-            expr_hash: hash,
+            expr_hash: schema_hash,
             schema_name: schema.name.clone(),
             code_size: 0, // TODO: Get actual code size
             accessed_fields: field_names,
@@ -378,7 +380,7 @@ impl SchemaJITCompiler {
         self.stats.schema_compiles += 1;
         self.stats.total_compile_time_ns += duration.as_nanos() as u64;
 
-        cache.insert(hash, compiled.clone());
+        cache.insert(schema_hash, compiled.clone());
 
         Ok(compiled)
     }

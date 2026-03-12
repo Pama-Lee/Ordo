@@ -1,0 +1,99 @@
+{
+  "L1": {
+    "config": { "name": "L1-trivial", "entry_step": "d1", "version": "1.0.0" },
+    "steps": {
+      "d1": { "id": "d1", "name": "Check", "type": "decision", "branches": [
+        { "condition": "score >= 60", "next_step": "pass" }
+      ], "default_next": "fail" },
+      "pass": { "id": "pass", "name": "Pass", "type": "terminal", "result": { "code": "PASS", "message": "passed" } },
+      "fail": { "id": "fail", "name": "Fail", "type": "terminal", "result": { "code": "FAIL", "message": "failed" } }
+    }
+  },
+  "L2": {
+    "config": { "name": "L2-simple", "entry_step": "d1", "version": "1.0.0" },
+    "steps": {
+      "d1": { "id": "d1", "name": "Score", "type": "decision", "branches": [
+        { "condition": "score >= 90", "next_step": "high" },
+        { "condition": "score >= 70", "next_step": "mid" },
+        { "condition": "score >= 50", "next_step": "low" }
+      ], "default_next": "fail" },
+      "high": { "id": "high", "name": "High", "type": "terminal", "result": { "code": "HIGH", "message": "high tier" } },
+      "mid":  { "id": "mid",  "name": "Mid",  "type": "terminal", "result": { "code": "MID",  "message": "mid tier" } },
+      "low":  { "id": "low",  "name": "Low",  "type": "terminal", "result": { "code": "LOW",  "message": "low tier" } },
+      "fail": { "id": "fail", "name": "Fail", "type": "terminal", "result": { "code": "FAIL", "message": "failed" } }
+    }
+  },
+  "L3": {
+    "config": { "name": "L3-medium", "entry_step": "d1", "version": "1.0.0" },
+    "steps": {
+      "d1": { "id": "d1", "name": "Membership", "type": "decision", "branches": [
+        { "condition": "user.membership == \"gold\"",   "next_step": "d2_gold" },
+        { "condition": "user.membership == \"silver\"", "next_step": "d2_silver" }
+      ], "default_next": "d2_bronze" },
+      "d2_gold": { "id": "d2_gold", "name": "GoldAmount", "type": "decision", "branches": [
+        { "condition": "order.amount >= 10000", "next_step": "t_gold_high" },
+        { "condition": "order.amount >= 5000",  "next_step": "t_gold_med_h" },
+        { "condition": "order.amount >= 1000",  "next_step": "t_gold_med_l" }
+      ], "default_next": "t_gold_low" },
+      "d2_silver": { "id": "d2_silver", "name": "SilverAmount", "type": "decision", "branches": [
+        { "condition": "order.amount >= 10000", "next_step": "t_silver_high" },
+        { "condition": "order.amount >= 5000",  "next_step": "t_silver_med" }
+      ], "default_next": "t_silver_low" },
+      "d2_bronze": { "id": "d2_bronze", "name": "BronzeAmount", "type": "decision", "branches": [
+        { "condition": "order.amount >= 10000", "next_step": "t_bronze_high" }
+      ], "default_next": "t_bronze_low" },
+      "t_gold_high":   { "id": "t_gold_high",   "name": "GoldHigh",   "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.30 } } },
+      "t_gold_med_h":  { "id": "t_gold_med_h",  "name": "GoldMedH",   "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.25 } } },
+      "t_gold_med_l":  { "id": "t_gold_med_l",  "name": "GoldMedL",   "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.20 } } },
+      "t_gold_low":    { "id": "t_gold_low",    "name": "GoldLow",    "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.15 } } },
+      "t_silver_high": { "id": "t_silver_high", "name": "SilverHigh", "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.20 } } },
+      "t_silver_med":  { "id": "t_silver_med",  "name": "SilverMed",  "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.15 } } },
+      "t_silver_low":  { "id": "t_silver_low",  "name": "SilverLow",  "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.10 } } },
+      "t_bronze_high": { "id": "t_bronze_high", "name": "BronzeHigh", "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.10 } } },
+      "t_bronze_low":  { "id": "t_bronze_low",  "name": "BronzeLow",  "type": "terminal", "result": { "code": "DOMESTIC", "message": "domestic order", "data": { "discount_rate": 0.05 } } }
+    }
+  },
+  "L4": {
+    "config": { "name": "L4-complex", "entry_step": "d1", "version": "1.0.0" },
+    "steps": {
+      "d1": { "id": "d1", "name": "TxnAmount", "type": "decision", "branches": [
+        { "condition": "transaction.amount >= 100000", "next_step": "d2_critical" },
+        { "condition": "transaction.amount >= 50000",  "next_step": "d2_high" },
+        { "condition": "transaction.amount >= 10000",  "next_step": "d2_medium" },
+        { "condition": "transaction.amount >= 1000",   "next_step": "d2_low" }
+      ], "default_next": "d2_minimal" },
+      "d2_critical": { "id": "d2_critical", "name": "RiskCritical", "type": "decision", "branches": [
+        { "condition": "user.profile.risk_score >= 80", "next_step": "d3_block" },
+        { "condition": "user.profile.risk_score >= 50", "next_step": "d3_review" }
+      ], "default_next": "d3_flag" },
+      "d2_high": { "id": "d2_high", "name": "RiskHigh", "type": "decision", "branches": [
+        { "condition": "user.profile.risk_score >= 80", "next_step": "d3_review" },
+        { "condition": "user.profile.risk_score >= 50", "next_step": "d3_flag" }
+      ], "default_next": "d3_monitor" },
+      "d2_medium": { "id": "d2_medium", "name": "RiskMedium", "type": "decision", "branches": [
+        { "condition": "user.profile.risk_score >= 80", "next_step": "d3_flag" }
+      ], "default_next": "d3_monitor" },
+      "d2_low": { "id": "d2_low", "name": "RiskLow", "type": "decision", "branches": [
+        { "condition": "user.profile.risk_score >= 90", "next_step": "d3_flag" }
+      ], "default_next": "d3_pass" },
+      "d2_minimal": { "id": "d2_minimal", "name": "RiskMinimal", "type": "decision", "branches": [
+        { "condition": "user.profile.risk_score >= 95", "next_step": "d3_flag" }
+      ], "default_next": "d3_pass" },
+      "d3_block":   { "id": "d3_block",   "name": "HistBlock",   "type": "decision", "branches": [{ "condition": "len(user.history.transactions) > 100", "next_step": "d4_geo_block" }], "default_next": "d4_geo_block" },
+      "d3_review":  { "id": "d3_review",  "name": "HistReview",  "type": "decision", "branches": [{ "condition": "len(user.history.transactions) > 50",  "next_step": "d4_geo_review" }], "default_next": "d4_geo_review" },
+      "d3_flag":    { "id": "d3_flag",    "name": "HistFlag",    "type": "decision", "branches": [{ "condition": "len(user.history.transactions) > 20",  "next_step": "d4_geo_flag" }], "default_next": "d4_geo_monitor" },
+      "d3_monitor": { "id": "d3_monitor", "name": "HistMonitor", "type": "decision", "branches": [{ "condition": "len(user.history.transactions) > 200", "next_step": "d4_geo_flag" }], "default_next": "d4_geo_pass" },
+      "d3_pass":    { "id": "d3_pass",    "name": "HistPass",    "type": "decision", "branches": [{ "condition": "len(user.history.transactions) > 500", "next_step": "d4_geo_monitor" }], "default_next": "d4_geo_pass" },
+      "d4_geo_block":   { "id": "d4_geo_block",   "name": "GeoBlock",   "type": "decision", "branches": [{ "condition": "device.trust_level >= 8", "next_step": "t_review" }], "default_next": "t_block" },
+      "d4_geo_review":  { "id": "d4_geo_review",  "name": "GeoReview",  "type": "decision", "branches": [{ "condition": "device.trust_level >= 5", "next_step": "t_flag" }], "default_next": "t_review" },
+      "d4_geo_flag":    { "id": "d4_geo_flag",    "name": "GeoFlag",    "type": "decision", "branches": [{ "condition": "device.trust_level >= 7", "next_step": "t_monitor" }], "default_next": "t_flag" },
+      "d4_geo_monitor": { "id": "d4_geo_monitor", "name": "GeoMonitor", "type": "decision", "branches": [{ "condition": "device.trust_level >= 3", "next_step": "t_pass" }], "default_next": "t_monitor" },
+      "d4_geo_pass":    { "id": "d4_geo_pass",    "name": "GeoPass",    "type": "decision", "branches": [{ "condition": "device.trust_level < 2", "next_step": "t_monitor" }], "default_next": "t_pass" },
+      "t_block":   { "id": "t_block",   "name": "Block",   "type": "terminal", "result": { "code": "BLOCK",   "message": "transaction blocked" } },
+      "t_review":  { "id": "t_review",  "name": "Review",  "type": "terminal", "result": { "code": "REVIEW",  "message": "manual review required" } },
+      "t_flag":    { "id": "t_flag",    "name": "Flag",    "type": "terminal", "result": { "code": "FLAG",    "message": "flagged for monitoring" } },
+      "t_monitor": { "id": "t_monitor", "name": "Monitor", "type": "terminal", "result": { "code": "MONITOR", "message": "enhanced monitoring" } },
+      "t_pass":    { "id": "t_pass",    "name": "Pass",    "type": "terminal", "result": { "code": "PASS",    "message": "approved" } }
+    }
+  }
+}

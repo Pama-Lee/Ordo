@@ -5,9 +5,8 @@
 //! - Intermediate variables
 //! - Execution state
 
-use super::{IString, Value};
+use super::Value;
 use hashbrown::HashMap;
-use std::sync::Arc;
 
 /// Execution context
 ///
@@ -17,7 +16,7 @@ pub struct Context {
     /// Root data (input fact data)
     data: Value,
     /// Variable storage (variables set during execution)
-    variables: HashMap<IString, Value>,
+    variables: HashMap<String, Value>,
     /// Current iteration item (used in batch mode)
     current_item: Option<Value>,
     /// Current item index
@@ -91,7 +90,7 @@ impl Context {
     /// Set variable
     #[inline]
     pub fn set_variable(&mut self, name: impl Into<String>, value: Value) {
-        self.variables.insert(Arc::from(name.into()), value);
+        self.variables.insert(name.into(), value);
     }
 
     /// Remove variable
@@ -102,7 +101,7 @@ impl Context {
 
     /// Get all variables
     #[inline]
-    pub fn variables(&self) -> &HashMap<IString, Value> {
+    pub fn variables(&self) -> &HashMap<String, Value> {
         &self.variables
     }
 
@@ -113,7 +112,7 @@ impl Context {
         self.current_index = Some(index);
         // Expose the current index via a special `_index` variable so it can be accessed from expressions.
         self.variables
-            .insert(Arc::from("_index"), Value::int(index as i64));
+            .insert("_index".to_string(), Value::int(index as i64));
     }
 
     /// Clear current iteration item

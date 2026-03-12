@@ -1,0 +1,1 @@
+{"name":"bench-json-rules","version":"1.0.0","dependencies":{"json-rules-engine":"^6","fastify":"^4"}}

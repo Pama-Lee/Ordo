@@ -1,0 +1,7 @@
+FROM node:20-slim
+WORKDIR /app
+COPY rules/json-rules/package.json rules/json-rules/package-lock.json* ./
+RUN npm install --production
+COPY rules/json-rules/server.js ./
+EXPOSE 8080
+CMD ["node", "server.js"]

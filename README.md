@@ -5,7 +5,7 @@
 <h1 align="center">Ordo</h1>
 
 <p align="center">
-  <strong>A high-performance rule engine with visual editor</strong>
+  <strong>Sub-microsecond rule execution with a built-in visual editor</strong>
 </p>
 
 <p align="center">
@@ -49,6 +49,39 @@
 
 ---
 
+## How it works
+
+Define a rule (JSON or YAML):
+
+```json
+{
+  "config": { "name": "discount", "entry_step": "check" },
+  "steps": {
+    "check": {
+      "type": "decision",
+      "branches": [{ "condition": "user.vip == true", "next_step": "vip" }],
+      "default_next": "normal"
+    },
+    "vip":    { "type": "terminal", "result": { "code": "VIP",    "message": "20% off" } },
+    "normal": { "type": "terminal", "result": { "code": "NORMAL", "message": "5% off"  } }
+  }
+}
+```
+
+Evaluate in ~1.6 µs:
+
+```json
+// Input
+{ "user": { "vip": true } }
+
+// Output
+{ "code": "VIP", "message": "20% off" }
+```
+
+Rules live outside your code — update them without redeploying.
+
+---
+
 ## Why Ordo?
 
 | | **Ordo** | OPA | Drools | json-rules-engine |
@@ -60,6 +93,8 @@
 | WASM / browser | ✅ | ❌ | ❌ | ✅ (Node only) |
 | Deployment | single binary | agent + OPA server | JVM | Node.js service |
 | Language | Rust | Rego (DSL) | Java | JavaScript |
+
+<sub>Latency figures are warm-run single-thread benchmarks on Apple Silicon (M-series). OPA and Drools numbers are from their own published benchmarks and community reports; json-rules-engine measured locally. See <a href="benchmark/">benchmark/</a> for scripts, raw data, and methodology.</sub>
 
 ---
 
@@ -189,12 +224,23 @@ See [benchmark/](benchmark/) for detailed reports, graphs, and comparison method
 
 ### Try in 30 seconds
 
+**Docker** (no Rust install needed):
+
+```bash
+docker run -d -p 8080:8080 ghcr.io/pama-lee/ordo:latest
+```
+
+<details>
+<summary>From source</summary>
+
 ```bash
 git clone https://github.com/Pama-Lee/Ordo.git
 cd Ordo
 cargo build --release
 ./target/release/ordo-server
 ```
+
+</details>
 
 Create a rule:
 

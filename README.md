@@ -101,6 +101,7 @@ Rules live outside your code — update them without redeploying.
 ### Visual Rule Editor
 
 Design complex business rules with an intuitive drag-and-drop flow editor:
+
 <p align="center">
   <img src="images/main.png" alt="Ordo Visual Editor" width="100%" />
 </p>

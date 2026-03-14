@@ -46,13 +46,13 @@ Content-Type: application/json
 }
 ```
 
-| Field            | Type                | Required | Description                                                                                                                                  |
-| ---------------- | ------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `known_input`    | object              | ✅       | Fields already known at query time (e.g. current user session). Supports nested paths: `{"user": {"id": "alice"}}` is accessed as `user.id`. |
-| `target_results` | string[]            | ✅       | Result codes that mean "match". Paths leading to any other terminal are ignored.                                                             |
-| `format`         | `"sql"` \| `"json"` | —        | Output format. Default: `"sql"`.                                                                                                             |
-| `field_mapping`  | object              | —        | Maps rule field paths to database column names. Unmapped fields default to the path with `.` replaced by `_`.                                |
-| `max_paths`      | number              | —        | Maximum paths to collect before stopping. Default: `100`.                                                                                    |
+| Field            | Type                             | Required | Description                                                                                                                                  |
+| ---------------- | -------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `known_input`    | object                           | ✅       | Fields already known at query time (e.g. current user session). Supports nested paths: `{"user": {"id": "alice"}}` is accessed as `user.id`. |
+| `target_results` | string[]                         | ✅       | Result codes that mean "match". Paths leading to any other terminal are ignored.                                                             |
+| `format`         | `"sql"` \| `"json"` \| `"mongo"` | —        | Output format. Default: `"sql"`.                                                                                                             |
+| `field_mapping`  | object                           | —        | Maps rule field paths to database column names. Unmapped fields default to the path with `.` replaced by `_`.                                |
+| `max_paths`      | number                           | —        | Maximum paths to collect before stopping. Default: `100`. `0` means unlimited.                                                               |
 
 ## Response
 
@@ -66,12 +66,13 @@ Content-Type: application/json
 }
 ```
 
-| Field            | Type                     | Description                                                                                 |
-| ---------------- | ------------------------ | ------------------------------------------------------------------------------------------- |
-| `filter`         | string \| object \| null | The generated filter. String for SQL, object for JSON, `null` when `never_matches` is true. |
-| `always_matches` | bool                     | Every possible input matches. Skip the WHERE clause entirely (e.g. admin users).            |
-| `never_matches`  | bool                     | No input can ever match. Return an empty result immediately.                                |
-| `unknown_fields` | string[]                 | Rule fields that remained unresolved — they appear as columns in the filter.                |
+| Field            | Type                     | Description                                                                                                                                                     |
+| ---------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filter`         | string \| object \| null | The generated filter. String for SQL, object for JSON/Mongo, `null` when `never_matches` is true.                                                               |
+| `always_matches` | bool                     | Every possible input matches. Skip the WHERE clause entirely (e.g. admin users).                                                                                |
+| `never_matches`  | bool                     | No input can ever match. Return an empty result immediately.                                                                                                    |
+| `truncated`      | bool                     | The `max_paths` limit was reached before the full graph was explored. `always_matches` is also `true` to avoid false negatives. Increase `max_paths` and retry. |
+| `unknown_fields` | string[]                 | Rule fields that remained unresolved — they appear as columns in the filter.                                                                                    |
 
 ## How It Works
 
@@ -92,7 +93,7 @@ The rule graph is traversed depth-first from the entry step:
   - Always-false → branch skipped; its negation accumulates toward the default path
   - Always-true → branch taken immediately; subsequent branches are dead code
   - Unknown → branch included with its condition; negation flows to later branches
-- **Action step**: transparent pass-through (variable mutations are not tracked in V1)
+- **Action step**: transparent pass-through (variable mutations are not tracked; downstream fields are treated as unknown DB columns, producing a superset filter)
 - **Terminal step**: if `result.code` is in `target_results`, the accumulated conditions become a path
 
 Conditions within a path are ANDed; multiple paths are ORed.
@@ -160,6 +161,46 @@ The `subscription = "free"` folds `user.subscription == "premium"` to false, eli
 { "filter": null, "never_matches": true }
 ```
 
+### MongoDB `$match` Format
+
+Use `"format": "mongo"` to get a MongoDB aggregation pipeline `$match` stage. The result is a JSON object you can pass directly to `db.collection.aggregate([{ $match: filter }])`.
+
+**Free member alice:**
+
+```json
+{
+  "filter": {
+    "$or": [
+      { "owner_id": "alice" },
+      { "$and": [{ "visibility": "public" }, { "status": "published" }] }
+    ]
+  }
+}
+```
+
+**Supported operators:**
+
+| Expression                | `$match` output                             |
+| ------------------------- | ------------------------------------------- |
+| `field == "x"`            | `{ col: "x" }`                              |
+| `field == null`           | `{ col: null }`                             |
+| `field != "x"`            | `{ col: { "$ne": "x" } }`                   |
+| `field > n`               | `{ col: { "$gt": n } }`                     |
+| `field in ["a","b"]`      | `{ col: { "$in": ["a","b"] } }`             |
+| `field not in ["a","b"]`  | `{ col: { "$nin": ["a","b"] } }`            |
+| `contains(field, "x")`    | `{ col: { "$regex": "x" } }`                |
+| `starts_with(field, "x")` | `{ col: { "$regex": "^x" } }`               |
+| `ends_with(field, "x")`   | `{ col: { "$regex": "x$" } }`               |
+| `is_null(field)`          | `{ col: null }`                             |
+| `!is_null(field)`         | `{ col: { "$ne": null, "$exists": true } }` |
+| `a && b`                  | `{ "$and": [a, b] }`                        |
+| `a \|\| b`                | `{ "$or": [a, b] }`                         |
+| Multiple paths            | `{ "$or": [...] }`                          |
+| Always matches            | `{}` (empty — no filter)                    |
+| Never matches             | `{ "$expr": false }`                        |
+
+Regex metacharacters in string literals are automatically escaped.
+
 ### JSON Predicate Format
 
 Use `"format": "json"` for a structured predicate tree that ORMs and front-end clients can consume:
@@ -197,22 +238,24 @@ Use `"format": "json"` for a structured predicate tree that ORMs and front-end c
 
 ## SQL Generation Reference
 
-| Expression                | SQL                     |
-| ------------------------- | ----------------------- |
-| `field == "x"`            | `col = 'x'`             |
-| `field != "x"`            | `col != 'x'`            |
-| `field in ["a","b"]`      | `col IN ('a', 'b')`     |
-| `field not in ["a","b"]`  | `col NOT IN ('a', 'b')` |
-| `contains(field, "x")`    | `col LIKE '%x%'`        |
-| `starts_with(field, "x")` | `col LIKE 'x%'`         |
-| `ends_with(field, "x")`   | `col LIKE '%x'`         |
-| `is_null(field)`          | `col IS NULL`           |
-| `!is_null(field)`         | `col IS NOT NULL`       |
-| `a && b`                  | `(a AND b)`             |
-| `a \|\| b`                | `(a OR b)`              |
-| Multiple paths            | `(...) OR (...)`        |
+| Expression                | SQL                         |
+| ------------------------- | --------------------------- |
+| `field == "x"`            | `col = 'x'`                 |
+| `field == null`           | `col IS NULL`               |
+| `field != "x"`            | `col != 'x'`                |
+| `field != null`           | `col IS NOT NULL`           |
+| `field in ["a","b"]`      | `col IN ('a', 'b')`         |
+| `field not in ["a","b"]`  | `col NOT IN ('a', 'b')`     |
+| `contains(field, "x")`    | `col LIKE '%x%' ESCAPE '!'` |
+| `starts_with(field, "x")` | `col LIKE 'x%' ESCAPE '!'`  |
+| `ends_with(field, "x")`   | `col LIKE '%x' ESCAPE '!'`  |
+| `is_null(field)`          | `col IS NULL`               |
+| `!is_null(field)`         | `col IS NOT NULL`           |
+| `a && b`                  | `(a AND b)`                 |
+| `a \|\| b`                | `(a OR b)`                  |
+| Multiple paths            | `(...) OR (...)`            |
 
-String literals are single-quote escaped (`'` → `''`). Arithmetic operators and unsupported functions return a `500` error.
+String literals are single-quote escaped (`'` → `''`). LIKE pattern literals additionally escape `!` → `!!`, `%` → `!%`, `_` → `!_` so that wildcards in values are treated literally. Null comparisons use `IS NULL` / `IS NOT NULL` to match SQL three-valued logic. Arithmetic operators and unsupported functions return a `500` error.
 
 ## Errors
 
@@ -222,8 +265,7 @@ String literals are single-quote escaped (`'` → `''`). Arithmetic operators an
 | 404    | Ruleset not found                                                 |
 | 500    | Filter compilation failed (e.g. unsupported operator in SQL mode) |
 
-## V1 Limitations
+## Known Limitations
 
 - **Action step mutations**: `SetVariable` side-effects are not tracked. Downstream conditions referencing mutated variables are treated as unknown columns — the filter may be a superset. Application-level execution handles the final filtering.
-- **No MongoDB `$match`**: Planned for V2.
 - **Depth limit**: 50 steps maximum traversal depth (hard limit, prevents infinite loops in cyclic graphs).

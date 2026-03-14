@@ -24,9 +24,7 @@
   <a href="https://discord.gg/Y529FkArhh"><img src="https://img.shields.io/badge/discord-join-7289da?logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
-<p align="center">
-  <img src="images/main.png" alt="Ordo Visual Editor" width="100%" />
-</p>
+
 
 ---
 
@@ -34,7 +32,7 @@
 
 **Ordo** (Latin for "order") is an enterprise-grade rule engine built in Rust — evaluate business rules with **sub-microsecond latency** without touching your application code.
 
-### ✨ Try it now: [Live Playground](https://pama-lee.github.io/Ordo/)
+**Try it now:** [Live Playground](https://pama-lee.github.io/Ordo/)
 
 **Best for:**
 - Fraud / risk scoring where latency matters
@@ -100,10 +98,12 @@ Rules live outside your code — update them without redeploying.
 
 ## Features
 
-### 🎨 Visual Rule Editor
+### Visual Rule Editor
 
 Design complex business rules with an intuitive drag-and-drop flow editor:
-
+<p align="center">
+  <img src="images/main.png" alt="Ordo Visual Editor" width="100%" />
+</p>
 <p align="center">
   <img src="images/flow.png" alt="Flow Editor" width="100%" />
 </p>
@@ -113,7 +113,7 @@ Design complex business rules with an intuitive drag-and-drop flow editor:
 - **Real-time Execution**: Test rules instantly with WASM-powered execution
 - **Execution Trace**: Debug step-by-step with visual path highlighting
 
-### 🚀 Blazing Fast
+### Performance
 
 - **1.63 µs** average rule execution (interpreter, warm, Apple Silicon M-series)
 - **50–80 ns** with JIT compilation — 20–30x faster for numeric expressions
@@ -123,14 +123,14 @@ Design complex business rules with an intuitive drag-and-drop flow editor:
 > Benchmark methodology: Apple Silicon M-series, single-threaded, warm runs, L1–L4 rule complexity.
 > See [benchmark/](benchmark/) for scripts, raw data, and comparison methodology.
 
-### 🔧 Flexible Rule Definition
+### Flexible Rule Definition
 
 - **Step Flow Model**: Linear decision steps with conditional jumps
 - **Rich Expressions**: Comparisons, logical operators, functions, conditionals
 - **Built-in Functions**: `len()`, `sum()`, `avg()`, `upper()`, `lower()`, `abs()`, `min()`, `max()`
 - **Field Coalescing**: `coalesce(field, fallback, default)` for missing field handling
 
-### 🗄️ Data Filter API
+### Data Filter API
 
 Push rule logic directly into your database — no full-table scans, no row-by-row evaluation:
 
@@ -153,7 +153,7 @@ curl -X POST http://localhost:8080/api/v1/rulesets/doc_access/filter \
 - **SQL, JSON, and MongoDB `$match` output**: Standard WHERE clause, predicate tree, or `$match` stage
 - **Zero impact on execution**: Completely separate code path, no hot-path overhead
 
-### 🔒 Compiled Rules (Rule Protection)
+### Compiled Rules (Rule Protection)
 
 Protect your business logic by compiling rules into binary format:
 
@@ -167,7 +167,7 @@ let loaded = CompiledRuleSet::load_from_file("rules.ordo")?;
 let result = CompiledRuleExecutor::new().execute(&loaded, input)?;
 ```
 
-### 🛡️ Production Ready
+### Production Ready
 
 - **Deterministic execution**: Same input → same path → same result, always
 - **Hot reload**: Update rules without service restart
@@ -176,7 +176,7 @@ let result = CompiledRuleExecutor::new().execute(&loaded, input)?;
 - **Prometheus metrics** + health endpoint out of the box
 - **Distributed deployment**: Single-writer / multi-reader with NATS JetStream sync
 
-### 🔌 Easy Integration
+### Integration
 
 - **HTTP REST API**: Simple JSON-based interface
 - **WebAssembly**: Run rules directly in the browser
@@ -390,5 +390,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <sub>Built with 🦀 and Rust</sub>
+  <sub>Built with Rust</sub>
 </p>

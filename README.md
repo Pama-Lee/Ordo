@@ -88,8 +88,8 @@ Rules live outside your code — update them without redeploying.
 | JIT compilation | ✅ Cranelift | ❌ | ❌ | ❌ |
 | Visual editor | ✅ built-in | ❌ | ✅ (Workbench, heavy) | ❌ |
 | DB filter push-down | ✅ SQL/JSON/Mongo | ❌ | ❌ | ❌ |
-| WASM / browser | ✅ | ❌ | ❌ | ✅ (Node only) |
-| Deployment | single binary | agent + OPA server | JVM | Node.js service |
+| WASM / browser | ✅ native | ⚠️ via `opa build -t wasm` | ❌ | ✅ (Node only) |
+| Deployment | single binary | single binary (daemon) | JVM | Node.js service |
 | Language | Rust | Rego (DSL) | Java | JavaScript |
 
 <sub>Latency figures are warm-run single-thread benchmarks on Apple Silicon (M-series). OPA and Drools numbers are from their own published benchmarks and community reports; json-rules-engine measured locally. See <a href="benchmark/">benchmark/</a> for scripts, raw data, and methodology.</sub>

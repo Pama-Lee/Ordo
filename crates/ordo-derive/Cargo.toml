@@ -5,7 +5,7 @@ edition = "2021"
 description = "Procedural macros for the Ordo rule engine — #[derive(TypedContext)] for schema-aware JIT"
 license = "MIT"
 keywords = ["rule-engine", "jit", "derive", "macros", "ordo"]
-categories = ["development-tools::procedural-macro-helper"]
+categories = ["development-tools"]
 repository = "https://github.com/Pama-Lee/Ordo"
 homepage = "https://github.com/Pama-Lee/Ordo"
 

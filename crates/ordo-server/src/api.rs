@@ -1209,7 +1209,6 @@ pub async fn compile_filter(
 
 /// Resolver backed by an in-memory snapshot of rulesets for a given tenant.
 /// Used with CallRuleSet actions in the rule executor.
-#[allow(dead_code)]
 struct SnapshotResolver {
     rulesets: std::collections::HashMap<String, Arc<RuleSet>>,
 }
@@ -1287,12 +1286,19 @@ pub async fn execute_pipeline(
         None
     };
 
+    // Build a resolver from the resolved rulesets so CallRuleSet works within pipeline stages
+    let snapshot = SnapshotResolver {
+        rulesets: resolved.iter().cloned().collect(),
+    };
+    let mut pipeline_executor =
+        RuleExecutor::with_trace_and_metrics(TraceConfig::minimal(), state.metric_sink.clone());
+    pipeline_executor.set_resolver(Arc::new(snapshot));
+
     let mut current_input = request.input;
     let mut stages = Vec::with_capacity(resolved.len());
 
     for (name, ruleset) in &resolved {
-        let result = state
-            .executor
+        let result = pipeline_executor
             .execute_with_options(ruleset, current_input.clone(), exec_options.as_ref())
             .map_err(|e| ApiError::internal(format!("Pipeline stage '{}' failed: {}", name, e)))?;
 

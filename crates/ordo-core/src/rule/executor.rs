@@ -90,6 +90,8 @@ pub struct RuleExecutor {
     metric_sink: Arc<dyn MetricSink>,
     /// Optional resolver for CallRuleSet actions
     resolver: Option<Arc<dyn super::RuleSetResolver>>,
+    /// Maximum nesting depth for CallRuleSet (prevents unbounded recursion)
+    max_call_depth: usize,
 }
 
 impl Default for RuleExecutor {
@@ -106,6 +108,7 @@ impl RuleExecutor {
             trace_config: TraceConfig::default(),
             metric_sink: Arc::new(NoOpMetricSink),
             resolver: None,
+            max_call_depth: 10,
         }
     }
 
@@ -116,6 +119,7 @@ impl RuleExecutor {
             trace_config,
             metric_sink: Arc::new(NoOpMetricSink),
             resolver: None,
+            max_call_depth: 10,
         }
     }
 
@@ -126,6 +130,7 @@ impl RuleExecutor {
             trace_config: TraceConfig::default(),
             metric_sink,
             resolver: None,
+            max_call_depth: 10,
         }
     }
 
@@ -139,6 +144,7 @@ impl RuleExecutor {
             trace_config,
             metric_sink,
             resolver: None,
+            max_call_depth: 10,
         }
     }
 
@@ -193,7 +199,14 @@ impl RuleExecutor {
             .and_then(|o| o.enable_trace)
             .unwrap_or(ruleset.config.enable_trace);
 
-        self.execute_internal(ruleset, input, timeout_ms, max_depth, enable_trace)
+        self.execute_internal(
+            ruleset,
+            input,
+            timeout_ms,
+            max_depth,
+            enable_trace,
+            self.max_call_depth,
+        )
     }
 
     /// Internal execute implementation with explicit config parameters
@@ -204,6 +217,7 @@ impl RuleExecutor {
         timeout_ms: u64,
         max_depth: usize,
         enable_trace: bool,
+        remaining_call_depth: usize,
     ) -> Result<ExecutionResult> {
         let start_time = Instant::now();
         let mut ctx = Context::new(input);
@@ -247,10 +261,20 @@ impl RuleExecutor {
             // When tracing is off (default), zero Instant calls per step.
             let (step_result, step_duration) = if tracing {
                 let step_start = Instant::now();
-                let result = self.execute_step(step, &mut ctx, &ruleset.config.field_missing)?;
+                let result = self.execute_step(
+                    step,
+                    &mut ctx,
+                    &ruleset.config.field_missing,
+                    remaining_call_depth,
+                )?;
                 (result, step_start.elapsed().as_micros() as u64)
             } else {
-                let result = self.execute_step(step, &mut ctx, &ruleset.config.field_missing)?;
+                let result = self.execute_step(
+                    step,
+                    &mut ctx,
+                    &ruleset.config.field_missing,
+                    remaining_call_depth,
+                )?;
                 (result, 0)
             };
 
@@ -381,6 +405,7 @@ impl RuleExecutor {
         step: &'a Step,
         ctx: &mut Context,
         field_missing: &FieldMissingBehavior,
+        remaining_call_depth: usize,
     ) -> Result<StepResult<'a>> {
         match &step.kind {
             StepKind::Decision {
@@ -395,7 +420,7 @@ impl RuleExecutor {
                     if condition_result {
                         // Execute branch actions
                         for action in &branch.actions {
-                            self.execute_action(action, ctx)?;
+                            self.execute_action(action, ctx, remaining_call_depth)?;
                         }
                         return Ok(StepResult::Continue {
                             next_step: branch.next_step.as_str(),
@@ -419,7 +444,7 @@ impl RuleExecutor {
             StepKind::Action { actions, next_step } => {
                 // Execute all actions
                 for action in actions {
-                    self.execute_action(action, ctx)?;
+                    self.execute_action(action, ctx, remaining_call_depth)?;
                 }
                 Ok(StepResult::Continue {
                     next_step: next_step.as_str(),
@@ -475,7 +500,12 @@ impl RuleExecutor {
     }
 
     /// Execute an action
-    fn execute_action(&self, action: &super::step::Action, ctx: &mut Context) -> Result<()> {
+    fn execute_action(
+        &self,
+        action: &super::step::Action,
+        ctx: &mut Context,
+        remaining_call_depth: usize,
+    ) -> Result<()> {
         match &action.kind {
             ActionKind::SetVariable { name, value } => {
                 let val = self.evaluator.eval(value, ctx)?;
@@ -524,6 +554,13 @@ impl RuleExecutor {
                 input_mapping,
                 result_variable,
             } => {
+                if remaining_call_depth == 0 {
+                    return Err(OrdoError::eval_error(format!(
+                        "CallRuleSet max nesting depth ({}) exceeded calling '{}'",
+                        self.max_call_depth, ruleset_name
+                    )));
+                }
+
                 let resolver = self.resolver.as_ref().ok_or_else(|| {
                     OrdoError::eval_error("CallRuleSet requires a resolver to be configured")
                 })?;
@@ -541,8 +578,15 @@ impl RuleExecutor {
                     ctx.data().clone()
                 };
 
-                // Execute sub-ruleset (recursive call — depth is already bounded by max_depth)
-                let sub_result = self.execute(&target, sub_input)?;
+                // Execute sub-ruleset with decremented call depth
+                let sub_result = self.execute_internal(
+                    &target,
+                    sub_input,
+                    target.config.timeout_ms,
+                    target.config.max_depth,
+                    false,
+                    remaining_call_depth - 1,
+                )?;
 
                 // Store result as a variable
                 let result_obj = Value::object({

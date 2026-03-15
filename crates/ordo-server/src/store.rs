@@ -1091,7 +1091,7 @@ impl RuleStore {
     fn data_dir_for_tenant(&self, tenant_id: &str) -> Option<PathBuf> {
         self.rules_dir.as_ref().map(|dir| {
             if self.multi_tenancy_enabled {
-                dir.join("tenants").join(tenant_id).join("data")
+                dir.join(tenant_id).join("data")
             } else {
                 dir.join("data")
             }
@@ -1106,9 +1106,8 @@ impl RuleStore {
         value: ordo_core::context::Value,
     ) -> io::Result<()> {
         let key = self.make_data_key(tenant_id, name);
-        self.data.insert(key, Arc::new(value.clone()));
 
-        // Persist to disk if configured
+        // Persist to disk first, so a failed write doesn't leave stale in-memory data
         if let Some(data_dir) = self.data_dir_for_tenant(tenant_id) {
             fs::create_dir_all(&data_dir)?;
             let path = data_dir.join(format!("{}.json", name));
@@ -1120,6 +1119,8 @@ impl RuleStore {
                 name, tenant_id, path
             );
         }
+
+        self.data.insert(key, Arc::new(value));
 
         Ok(())
     }
@@ -1209,7 +1210,7 @@ impl RuleStore {
         } else {
             let data_dir = rules_dir.join("data");
             if data_dir.exists() {
-                vec![("default".to_string(), data_dir)]
+                vec![(self.default_tenant.clone(), data_dir)]
             } else {
                 vec![]
             }

@@ -735,6 +735,11 @@ impl FunctionRegistry {
                 validation.validate_exp = false;
                 validation.validate_aud = false;
                 validation.required_spec_claims.clear();
+                validation.algorithms = vec![
+                    jsonwebtoken::Algorithm::HS256,
+                    jsonwebtoken::Algorithm::HS384,
+                    jsonwebtoken::Algorithm::HS512,
+                ];
                 let key = jsonwebtoken::DecodingKey::from_secret(b"");
                 let data = jsonwebtoken::decode::<serde_json::Value>(token, &key, &validation)
                     .map_err(|e| OrdoError::eval_error(format!("jwt_decode: {}", e)))?;
@@ -974,11 +979,12 @@ impl FunctionRegistry {
             let vals = require_array("sprintf", &args[1])?;
             let mut result = fmt.to_string();
             for val in vals {
-                if let Some(pos) = result
-                    .find("%s")
-                    .or_else(|| result.find("%d"))
-                    .or_else(|| result.find("%f"))
-                    .or_else(|| result.find("%v"))
+                // Find the earliest placeholder regardless of type
+                if let Some(pos) = ["%s", "%d", "%f", "%v"]
+                    .iter()
+                    .filter_map(|p| result.find(p).map(|i| (i, *p)))
+                    .min_by_key(|(i, _)| *i)
+                    .map(|(i, _)| i)
                 {
                     let replacement = match val {
                         Value::String(s) => s.to_string(),
@@ -2231,6 +2237,26 @@ mod tests {
     }
 
     #[test]
+    fn test_jwt_decode_non_hs256() {
+        let registry = FunctionRegistry::new();
+        // Encode with HS384
+        let payload = Value::object({
+            let mut m = std::collections::HashMap::new();
+            m.insert("sub".to_string(), Value::string("u1"));
+            m
+        });
+        let token = registry
+            .call(
+                "jwt_encode",
+                &[payload, Value::string("secret"), Value::string("HS384")],
+            )
+            .unwrap();
+        // jwt_decode should accept non-HS256 tokens
+        let decoded = registry.call("jwt_decode", &[token]).unwrap();
+        assert_eq!(decoded.get_path("sub"), Some(&Value::string("u1")));
+    }
+
+    #[test]
     fn test_glob_match() {
         let registry = FunctionRegistry::new();
 
@@ -2419,6 +2445,24 @@ mod tests {
                 )
                 .unwrap(),
             Value::string("Hello Alice, you have 5 items")
+        );
+    }
+
+    #[test]
+    fn test_sprintf_mixed_placeholder_order() {
+        let registry = FunctionRegistry::new();
+        // %d appears before %s — must replace left-to-right
+        assert_eq!(
+            registry
+                .call(
+                    "sprintf",
+                    &[
+                        Value::string("%d items for %s"),
+                        Value::array(vec![Value::int(3), Value::string("Bob")])
+                    ]
+                )
+                .unwrap(),
+            Value::string("3 items for Bob")
         );
     }
 

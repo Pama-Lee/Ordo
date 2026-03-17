@@ -345,34 +345,37 @@ pub async fn create_ruleset(
     if exists {
         let rule_id = format!("{}/{}", tenant.id, name);
         let from_ver = old_version.unwrap_or_default();
-        state.audit_logger.log_rule_updated(
-            &rule_id,
-            &from_ver,
-            &new_version,
-            source_ip,
-        );
-        state.webhook_manager.fire(
-            crate::webhook::WebhookEvent::RuleUpdated,
-            Some(tenant.id.clone()),
-            serde_json::json!({
-                "name": name,
-                "from_version": from_ver,
-                "to_version": new_version,
-            }),
-        ).await;
+        state
+            .audit_logger
+            .log_rule_updated(&rule_id, &from_ver, &new_version, source_ip);
+        state
+            .webhook_manager
+            .fire(
+                crate::webhook::WebhookEvent::RuleUpdated,
+                Some(tenant.id.clone()),
+                serde_json::json!({
+                    "name": name,
+                    "from_version": from_ver,
+                    "to_version": new_version,
+                }),
+            )
+            .await;
     } else {
         let rule_id = format!("{}/{}", tenant.id, name);
         state
             .audit_logger
             .log_rule_created(&rule_id, &new_version, source_ip);
-        state.webhook_manager.fire(
-            crate::webhook::WebhookEvent::RuleCreated,
-            Some(tenant.id.clone()),
-            serde_json::json!({
-                "name": name,
-                "version": new_version,
-            }),
-        ).await;
+        state
+            .webhook_manager
+            .fire(
+                crate::webhook::WebhookEvent::RuleCreated,
+                Some(tenant.id.clone()),
+                serde_json::json!({
+                    "name": name,
+                    "version": new_version,
+                }),
+            )
+            .await;
     }
 
     let status = if exists {
@@ -404,11 +407,14 @@ pub async fn delete_ruleset(
         let source_ip = connect_info.map(|ci| ci.0.ip().to_string());
         let rule_id = format!("{}/{}", tenant.id, name);
         state.audit_logger.log_rule_deleted(&rule_id, source_ip);
-        state.webhook_manager.fire(
-            crate::webhook::WebhookEvent::RuleDeleted,
-            Some(tenant.id.clone()),
-            serde_json::json!({ "name": name }),
-        ).await;
+        state
+            .webhook_manager
+            .fire(
+                crate::webhook::WebhookEvent::RuleDeleted,
+                Some(tenant.id.clone()),
+                serde_json::json!({ "name": name }),
+            )
+            .await;
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::not_found(format!("RuleSet '{}' not found", name)))
@@ -517,15 +523,18 @@ pub async fn execute_ruleset(
     let trace = build_trace_info(result.trace.as_ref(), request.trace);
 
     // Fire webhook (non-blocking)
-    state.webhook_manager.fire(
-        crate::webhook::WebhookEvent::RuleExecuted,
-        Some(tenant.id.clone()),
-        serde_json::json!({
-            "name": name,
-            "code": &result.code,
-            "duration_us": result.duration_us,
-        }),
-    ).await;
+    state
+        .webhook_manager
+        .fire(
+            crate::webhook::WebhookEvent::RuleExecuted,
+            Some(tenant.id.clone()),
+            serde_json::json!({
+                "name": name,
+                "code": &result.code,
+                "duration_us": result.duration_us,
+            }),
+        )
+        .await;
 
     Ok(Json(ExecuteResponse {
         code: result.code,
@@ -844,16 +853,19 @@ pub async fn rollback_ruleset(
                 request.seq,
                 source_ip,
             );
-            state.webhook_manager.fire(
-                crate::webhook::WebhookEvent::RuleRollback,
-                Some(tenant.id.clone()),
-                serde_json::json!({
-                    "name": &name,
-                    "from_version": &from_version,
-                    "to_version": &to_version,
-                    "seq": request.seq,
-                }),
-            ).await;
+            state
+                .webhook_manager
+                .fire(
+                    crate::webhook::WebhookEvent::RuleRollback,
+                    Some(tenant.id.clone()),
+                    serde_json::json!({
+                        "name": &name,
+                        "from_version": &from_version,
+                        "to_version": &to_version,
+                        "seq": request.seq,
+                    }),
+                )
+                .await;
 
             Ok(Json(RollbackResponse {
                 status: "rolled_back".to_string(),
@@ -1572,9 +1584,6 @@ pub async fn delete_webhook(
     if state.webhook_manager.unregister(&id).await {
         Ok(StatusCode::NO_CONTENT)
     } else {
-        Err(ApiError::not_found(format!(
-            "Webhook '{}' not found",
-            id
-        )))
+        Err(ApiError::not_found(format!("Webhook '{}' not found", id)))
     }
 }

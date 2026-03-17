@@ -161,7 +161,12 @@ impl WebhookManager {
 
     /// Fire a webhook event. This is non-blocking — the actual HTTP call
     /// happens in the background delivery task.
-    pub async fn fire(&self, event: WebhookEvent, tenant_id: Option<String>, data: serde_json::Value) {
+    pub async fn fire(
+        &self,
+        event: WebhookEvent,
+        tenant_id: Option<String>,
+        data: serde_json::Value,
+    ) {
         let payload = WebhookPayload {
             event,
             timestamp: Utc::now(),
@@ -226,7 +231,10 @@ async fn deliver_with_retry(client: &reqwest::Client, job: DeliveryJob) {
             .post(&job.webhook.url)
             .header("Content-Type", "application/json")
             .header("User-Agent", format!("ordo-webhook/{}", ordo_core::VERSION))
-            .header("X-Ordo-Event", format!("{:?}", job.payload.event).to_lowercase())
+            .header(
+                "X-Ordo-Event",
+                format!("{:?}", job.payload.event).to_lowercase(),
+            )
             .header("X-Ordo-Webhook-ID", webhook_id.as_str())
             .header("X-Ordo-Delivery-Attempt", (attempt + 1).to_string());
 

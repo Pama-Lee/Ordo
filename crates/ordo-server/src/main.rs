@@ -312,6 +312,12 @@ async fn main() -> anyhow::Result<()> {
     let rate_limiter = Arc::new(RateLimiter::new());
     let recent_writes = Arc::new(RecentWrites::new());
 
+    // Wire up self-write suppression so file watcher skips files this process persisted
+    {
+        let mut store_guard = store.write().await;
+        store_guard.set_recent_writes(recent_writes.clone());
+    }
+
     // Shutdown broadcast channel — signal handlers and servers share this.
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
@@ -687,6 +693,8 @@ async fn start_http_server(
                 .put(api::update_webhook)
                 .delete(api::delete_webhook),
         )
+        // Admin API
+        .route("/api/v1/admin/reload", post(api::admin_reload))
         // Metrics
         .route("/metrics", get(prometheus_metrics))
         // Tenant management
@@ -900,6 +908,7 @@ async fn readiness_check(State(state): State<AppState>) -> impl IntoResponse {
             "sync": {
                 "nats_configured": state.config.nats_enabled(),
                 "watch_rules": state.config.watch_rules,
+                "last_reload_timestamp": metrics::LAST_RELOAD_TIMESTAMP.get(),
             },
             "debug_mode": state.config.debug_enabled()
         })),

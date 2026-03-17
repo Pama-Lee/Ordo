@@ -56,6 +56,7 @@ fn is_write_request(method: &Method, path: &str) -> bool {
         "tenants" => true,
         "config" => true,
         "webhooks" => true,
+        "admin" => true,
         "execute" => false,
         "eval" => false,
         "debug" => false,
@@ -136,5 +137,10 @@ mod tests {
             &Method::PUT,
             "/api/v1/config/audit-sample-rate"
         ));
+    }
+
+    #[test]
+    fn test_admin_reload_is_blocked() {
+        assert!(is_write_request(&Method::POST, "/api/v1/admin/reload"));
     }
 }

@@ -340,21 +340,42 @@ pub async fn create_ruleset(
 
     metrics::set_tenant_rules_count(&tenant.id, store.list_for_tenant(&tenant.id).len() as i64);
 
-    // Log audit event
+    // Log audit event + fire webhook
     let source_ip = connect_info.map(|ci| ci.0.ip().to_string());
     if exists {
         let rule_id = format!("{}/{}", tenant.id, name);
-        state.audit_logger.log_rule_updated(
-            &rule_id,
-            &old_version.unwrap_or_default(),
-            &new_version,
-            source_ip,
-        );
+        let from_ver = old_version.unwrap_or_default();
+        state
+            .audit_logger
+            .log_rule_updated(&rule_id, &from_ver, &new_version, source_ip);
+        state
+            .webhook_manager
+            .fire(
+                crate::webhook::WebhookEvent::RuleUpdated,
+                Some(tenant.id.clone()),
+                serde_json::json!({
+                    "name": name,
+                    "from_version": from_ver,
+                    "to_version": new_version,
+                }),
+            )
+            .await;
     } else {
         let rule_id = format!("{}/{}", tenant.id, name);
         state
             .audit_logger
             .log_rule_created(&rule_id, &new_version, source_ip);
+        state
+            .webhook_manager
+            .fire(
+                crate::webhook::WebhookEvent::RuleCreated,
+                Some(tenant.id.clone()),
+                serde_json::json!({
+                    "name": name,
+                    "version": new_version,
+                }),
+            )
+            .await;
     }
 
     let status = if exists {
@@ -386,6 +407,14 @@ pub async fn delete_ruleset(
         let source_ip = connect_info.map(|ci| ci.0.ip().to_string());
         let rule_id = format!("{}/{}", tenant.id, name);
         state.audit_logger.log_rule_deleted(&rule_id, source_ip);
+        state
+            .webhook_manager
+            .fire(
+                crate::webhook::WebhookEvent::RuleDeleted,
+                Some(tenant.id.clone()),
+                serde_json::json!({ "name": name }),
+            )
+            .await;
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::not_found(format!("RuleSet '{}' not found", name)))
@@ -492,6 +521,20 @@ pub async fn execute_ruleset(
 
     // Build response using helper function
     let trace = build_trace_info(result.trace.as_ref(), request.trace);
+
+    // Fire webhook (non-blocking)
+    state
+        .webhook_manager
+        .fire(
+            crate::webhook::WebhookEvent::RuleExecuted,
+            Some(tenant.id.clone()),
+            serde_json::json!({
+                "name": name,
+                "code": &result.code,
+                "duration_us": result.duration_us,
+            }),
+        )
+        .await;
 
     Ok(Json(ExecuteResponse {
         code: result.code,
@@ -810,6 +853,19 @@ pub async fn rollback_ruleset(
                 request.seq,
                 source_ip,
             );
+            state
+                .webhook_manager
+                .fire(
+                    crate::webhook::WebhookEvent::RuleRollback,
+                    Some(tenant.id.clone()),
+                    serde_json::json!({
+                        "name": &name,
+                        "from_version": &from_version,
+                        "to_version": &to_version,
+                        "seq": request.seq,
+                    }),
+                )
+                .await;
 
             Ok(Json(RollbackResponse {
                 status: "rolled_back".to_string(),
@@ -1388,4 +1444,202 @@ pub async fn execute_pipeline(
         output: ordo_core::context::Value::object(final_output),
         duration_us: start.elapsed().as_micros() as u64,
     }))
+}
+
+// ==================== Webhook Management ====================
+
+/// Create webhook request
+#[derive(Deserialize)]
+pub struct CreateWebhookRequest {
+    /// Target URL
+    pub url: String,
+    /// Events to listen for (empty = all)
+    #[serde(default)]
+    pub events: Vec<crate::webhook::WebhookEvent>,
+    /// HMAC secret for signature verification
+    #[serde(default)]
+    pub secret: Option<String>,
+    /// Optional description
+    #[serde(default)]
+    pub description: String,
+    /// Max retries (default: 3)
+    #[serde(default = "default_webhook_retries")]
+    pub max_retries: u8,
+}
+
+fn default_webhook_retries() -> u8 {
+    3
+}
+
+/// Update webhook request
+#[derive(Deserialize)]
+pub struct UpdateWebhookRequest {
+    /// Target URL
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Events to listen for
+    #[serde(default)]
+    pub events: Option<Vec<crate::webhook::WebhookEvent>>,
+    /// HMAC secret
+    #[serde(default)]
+    pub secret: Option<Option<String>>,
+    /// Active flag
+    #[serde(default)]
+    pub active: Option<bool>,
+    /// Description
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Max retries
+    #[serde(default)]
+    pub max_retries: Option<u8>,
+}
+
+/// List all webhooks
+pub async fn list_webhooks(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::webhook::WebhookConfig>> {
+    Json(state.webhook_manager.list().await)
+}
+
+/// Get a webhook by ID
+pub async fn get_webhook(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<crate::webhook::WebhookConfig>> {
+    state
+        .webhook_manager
+        .get(&id)
+        .await
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found(format!("Webhook '{}' not found", id)))
+}
+
+/// Create a new webhook
+pub async fn create_webhook(
+    State(state): State<AppState>,
+    Json(request): Json<CreateWebhookRequest>,
+) -> ApiResult<(StatusCode, Json<crate::webhook::WebhookConfig>)> {
+    if request.url.is_empty() {
+        return Err(ApiError::bad_request("url cannot be empty"));
+    }
+
+    let config = crate::webhook::WebhookConfig {
+        id: String::new(), // auto-generated
+        url: request.url,
+        events: request.events,
+        secret: request.secret,
+        active: true,
+        max_retries: request.max_retries,
+        description: request.description,
+    };
+
+    let id = state.webhook_manager.register(config.clone()).await;
+
+    // Return the config with the assigned ID
+    let registered = state.webhook_manager.get(&id).await.unwrap();
+    Ok((StatusCode::CREATED, Json(registered)))
+}
+
+/// Update a webhook
+pub async fn update_webhook(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(request): Json<UpdateWebhookRequest>,
+) -> ApiResult<Json<crate::webhook::WebhookConfig>> {
+    let mut config = state
+        .webhook_manager
+        .get(&id)
+        .await
+        .ok_or_else(|| ApiError::not_found(format!("Webhook '{}' not found", id)))?;
+
+    if let Some(url) = request.url {
+        config.url = url;
+    }
+    if let Some(events) = request.events {
+        config.events = events;
+    }
+    if let Some(secret) = request.secret {
+        config.secret = secret;
+    }
+    if let Some(active) = request.active {
+        config.active = active;
+    }
+    if let Some(description) = request.description {
+        config.description = description;
+    }
+    if let Some(max_retries) = request.max_retries {
+        config.max_retries = max_retries;
+    }
+
+    state.webhook_manager.update(config.clone()).await;
+
+    Ok(Json(config))
+}
+
+/// Delete a webhook
+pub async fn delete_webhook(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<StatusCode> {
+    if state.webhook_manager.unregister(&id).await {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found(format!("Webhook '{}' not found", id)))
+    }
+}
+
+// ==================== Admin API ====================
+
+/// Manually trigger a full reload of all rules from disk.
+///
+/// This is useful when files are deployed externally (e.g. via CI/CD or
+/// config management) and you want immediate reload without waiting for
+/// the file watcher debounce or polling interval.
+pub async fn admin_reload(State(state): State<AppState>) -> ApiResult<Json<serde_json::Value>> {
+    let start = Instant::now();
+
+    if state.config.rules_dir.is_none() {
+        return Err(ApiError::bad_request(
+            "Reload requires --rules-dir to be configured".to_string(),
+        ));
+    }
+
+    let mut store = state.store.write().await;
+
+    // Full sync: load/update rules from disk AND remove rules deleted from disk.
+    let (rules_loaded, rules_removed) = store.sync_from_dir().map_err(|e| {
+        metrics::record_hot_reload("admin_full", false);
+        ApiError::internal(format!("Reload failed: {}", e))
+    })?;
+
+    // Full sync for external data as well.
+    let (data_loaded, data_removed) = store.sync_data_from_dir().unwrap_or((0, 0));
+
+    drop(store);
+
+    // Reload tenant config
+    if let Err(e) = state.tenant_manager.reload().await {
+        tracing::warn!("Tenant config reload failed during admin reload: {}", e);
+    }
+
+    metrics::record_hot_reload("admin_full", true);
+    let duration_ms = start.elapsed().as_millis() as u64;
+
+    tracing::info!(
+        rules_loaded,
+        rules_removed,
+        data_loaded,
+        data_removed,
+        duration_ms = duration_ms,
+        "Admin reload completed"
+    );
+
+    Ok(Json(serde_json::json!({
+        "status": "reloaded",
+        "rules_loaded": rules_loaded,
+        "rules_removed": rules_removed,
+        "data_loaded": data_loaded,
+        "data_removed": data_removed,
+        "duration_ms": duration_ms,
+    })))
 }

@@ -72,10 +72,7 @@ async fn build_full_test_app() -> Router {
             "/api/v1/rulesets/:name",
             get(api::get_ruleset).delete(api::delete_ruleset),
         )
-        .route(
-            "/api/v1/rulesets/:name/versions",
-            get(api::list_versions),
-        )
+        .route("/api/v1/rulesets/:name/versions", get(api::list_versions))
         .route(
             "/api/v1/rulesets/:name/rollback",
             post(api::rollback_ruleset),
@@ -86,10 +83,7 @@ async fn build_full_test_app() -> Router {
             post(api::execute_ruleset_batch),
         )
         .route("/api/v1/execute-pipeline", post(api::execute_pipeline))
-        .route(
-            "/api/v1/rulesets/:name/filter",
-            post(api::compile_filter),
-        )
+        .route("/api/v1/rulesets/:name/filter", post(api::compile_filter))
         .route("/api/v1/eval", post(api::eval_expression))
         .route(
             "/api/v1/config/audit-sample-rate",
@@ -459,12 +453,7 @@ async fn test_batch_with_trace() {
 #[tokio::test]
 async fn test_batch_parallel_vs_sequential() {
     let app = build_full_test_app().await;
-    post_json(
-        &app,
-        "/api/v1/rulesets",
-        &threshold_ruleset("batch_modes"),
-    )
-    .await;
+    post_json(&app, "/api/v1/rulesets", &threshold_ruleset("batch_modes")).await;
 
     let inputs = json!({
         "inputs": [
@@ -505,12 +494,7 @@ async fn test_batch_parallel_vs_sequential() {
 #[tokio::test]
 async fn test_batch_over_limit() {
     let app = build_full_test_app().await;
-    post_json(
-        &app,
-        "/api/v1/rulesets",
-        &threshold_ruleset("batch_limit"),
-    )
-    .await;
+    post_json(&app, "/api/v1/rulesets", &threshold_ruleset("batch_limit")).await;
 
     // 1001 inputs should exceed MAX_BATCH_SIZE (1000)
     let inputs: Vec<Value> = (0..1001).map(|i| json!({ "value": i })).collect();
@@ -556,12 +540,7 @@ async fn test_eval_string_expression() {
 #[tokio::test]
 async fn test_eval_no_context() {
     let app = build_full_test_app().await;
-    let (status, body) = post_json(
-        &app,
-        "/api/v1/eval",
-        &json!({ "expression": "1 + 2" }),
-    )
-    .await;
+    let (status, body) = post_json(&app, "/api/v1/eval", &json!({ "expression": "1 + 2" })).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["result"], 3);
 }
@@ -569,12 +548,7 @@ async fn test_eval_no_context() {
 #[tokio::test]
 async fn test_eval_invalid_expression() {
     let app = build_full_test_app().await;
-    let (status, _) = post_json(
-        &app,
-        "/api/v1/eval",
-        &json!({ "expression": "(((" }),
-    )
-    .await;
+    let (status, _) = post_json(&app, "/api/v1/eval", &json!({ "expression": "(((" })).await;
     // Should be a 4xx error for parse failure
     assert!(status.is_client_error() || status.is_server_error());
 }
@@ -614,7 +588,10 @@ async fn test_rollback_in_memory_mode() {
     // Should fail in memory mode
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(
-        body["message"].as_str().unwrap_or("").contains("memory-only"),
+        body["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("memory-only"),
         "expected memory-only error, got: {}",
         body
     );
@@ -664,12 +641,7 @@ async fn test_data_crud() {
     assert!(names.iter().any(|n| n == "pricing"));
 
     // Update
-    let (status, _) = put_json(
-        &app,
-        "/api/v1/data/pricing",
-        &json!({ "gold": 200 }),
-    )
-    .await;
+    let (status, _) = put_json(&app, "/api/v1/data/pricing", &json!({ "gold": 200 })).await;
     assert_eq!(status, StatusCode::OK);
 
     let (_, body) = get_request(&app, "/api/v1/data/pricing").await;
@@ -848,7 +820,10 @@ async fn test_create_duplicate_tenant() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body["message"].as_str().unwrap_or("").contains("already exists"));
+    assert!(body["message"]
+        .as_str()
+        .unwrap_or("")
+        .contains("already exists"));
 }
 
 #[tokio::test]
@@ -874,12 +849,7 @@ async fn test_get_nonexistent_tenant() {
 #[tokio::test]
 async fn test_update_nonexistent_tenant() {
     let app = build_full_test_app().await;
-    let (status, _) = put_json(
-        &app,
-        "/api/v1/tenants/ghost",
-        &json!({ "name": "Ghost" }),
-    )
-    .await;
+    let (status, _) = put_json(&app, "/api/v1/tenants/ghost", &json!({ "name": "Ghost" })).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 

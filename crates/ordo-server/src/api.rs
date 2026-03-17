@@ -1407,13 +1407,15 @@ pub async fn admin_reload(State(state): State<AppState>) -> ApiResult<Json<serde
     }
 
     let mut store = state.store.write().await;
-    let count = store.load_from_dir().map_err(|e| {
+
+    // Full sync: load/update rules from disk AND remove rules deleted from disk.
+    let (rules_loaded, rules_removed) = store.sync_from_dir().map_err(|e| {
         metrics::record_hot_reload("admin_full", false);
         ApiError::internal(format!("Reload failed: {}", e))
     })?;
 
-    // Also reload external data
-    let data_count = store.load_data_from_dir().unwrap_or(0);
+    // Full sync for external data as well.
+    let (data_loaded, data_removed) = store.sync_data_from_dir().unwrap_or((0, 0));
 
     drop(store);
 
@@ -1426,16 +1428,20 @@ pub async fn admin_reload(State(state): State<AppState>) -> ApiResult<Json<serde
     let duration_ms = start.elapsed().as_millis() as u64;
 
     tracing::info!(
-        rules = count,
-        data = data_count,
+        rules_loaded,
+        rules_removed,
+        data_loaded,
+        data_removed,
         duration_ms = duration_ms,
         "Admin reload completed"
     );
 
     Ok(Json(serde_json::json!({
         "status": "reloaded",
-        "rules_loaded": count,
-        "data_loaded": data_count,
+        "rules_loaded": rules_loaded,
+        "rules_removed": rules_removed,
+        "data_loaded": data_loaded,
+        "data_removed": data_removed,
         "duration_ms": duration_ms,
     })))
 }

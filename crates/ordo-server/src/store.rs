@@ -379,6 +379,170 @@ impl RuleStore {
         Ok(loaded)
     }
 
+    /// Full sync from disk: loads/updates all rules AND removes rules that no
+    /// longer exist on disk. Returns `(loaded, removed)`.
+    ///
+    /// Unlike `load_from_dir` (which only inserts/updates), this method
+    /// compares the set of keys found on disk with the in-memory set and
+    /// removes stale entries so memory always mirrors the directory contents.
+    pub fn sync_from_dir(&mut self) -> io::Result<(usize, usize)> {
+        let existing_keys: Vec<String> = self.rulesets.keys().cloned().collect();
+        let loaded = self.load_from_dir()?;
+
+        // `load_from_dir` inserts every key it finds on disk. Any key that was
+        // in memory before but was NOT re-inserted is stale (deleted from disk).
+        // We detect this by comparing the old key set with the current one:
+        // keys present before but no longer matching a file on disk should be
+        // removed. Since `load_from_dir` unconditionally inserts for every file
+        // it finds, the simplest approach is to collect the disk keys during load.
+        // However, to avoid changing `load_from_dir`'s signature, we use a
+        // different strategy: collect the set of keys that *should* exist by
+        // scanning the dir again (cheaply, just file stems — no parsing).
+        let disk_keys = self.collect_disk_rule_keys();
+        let mut removed = 0;
+        for key in &existing_keys {
+            if !disk_keys.contains(key) {
+                self.rulesets.remove(key);
+                removed += 1;
+                info!("Removed stale rule '{}' (deleted from disk)", key);
+            }
+        }
+
+        if removed > 0 {
+            info!("Sync removed {} stale rules", removed);
+        }
+        Ok((loaded, removed))
+    }
+
+    /// Scan the rules directory and return the set of keys that correspond to
+    /// rule files on disk, without actually parsing them. This is used by
+    /// `sync_from_dir` to detect stale in-memory entries.
+    fn collect_disk_rule_keys(&self) -> std::collections::HashSet<String> {
+        let mut keys = std::collections::HashSet::new();
+        let rules_dir = match &self.rules_dir {
+            Some(dir) if dir.exists() => dir.clone(),
+            _ => return keys,
+        };
+
+        let tenant_dirs: Vec<(String, PathBuf)> = if self.multi_tenancy_enabled {
+            fs::read_dir(&rules_dir)
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().is_dir())
+                .map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    (name, e.path())
+                })
+                .collect()
+        } else {
+            vec![(self.default_tenant.clone(), rules_dir)]
+        };
+
+        for (tenant_id, tenant_dir) in tenant_dirs {
+            let entries = match fs::read_dir(&tenant_dir) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if !path.is_file() || FileFormat::from_path(&path).is_none() {
+                    continue;
+                }
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    if Self::is_version_file(stem) {
+                        continue;
+                    }
+                    keys.insert(self.make_key(&tenant_id, stem));
+                }
+            }
+        }
+
+        keys
+    }
+
+    /// Full sync of external data from disk: loads/updates all data AND removes
+    /// entries that no longer exist on disk. Returns `(loaded, removed)`.
+    pub fn sync_data_from_dir(&mut self) -> io::Result<(usize, usize)> {
+        let existing_keys: Vec<String> = self.data.keys().cloned().collect();
+        let loaded = self.load_data_from_dir()?;
+
+        let disk_keys = self.collect_disk_data_keys();
+        let mut removed = 0;
+        for key in &existing_keys {
+            if !disk_keys.contains(key) {
+                self.data.remove(key);
+                removed += 1;
+                info!("Removed stale data '{}' (deleted from disk)", key);
+            }
+        }
+
+        if removed > 0 {
+            info!("Sync removed {} stale data entries", removed);
+        }
+        Ok((loaded, removed))
+    }
+
+    /// Scan data directories and return the set of data keys on disk.
+    fn collect_disk_data_keys(&self) -> std::collections::HashSet<String> {
+        let mut keys = std::collections::HashSet::new();
+        let rules_dir = match &self.rules_dir {
+            Some(dir) => dir.clone(),
+            None => return keys,
+        };
+
+        let tenant_data_dirs: Vec<(String, PathBuf)> = if self.multi_tenancy_enabled {
+            let tenants_dir = rules_dir.join("tenants");
+            if !tenants_dir.exists() {
+                return keys;
+            }
+            fs::read_dir(&tenants_dir)
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().is_dir())
+                .filter_map(|e| {
+                    let tenant_id = e.file_name().to_string_lossy().to_string();
+                    let data_dir = e.path().join("data");
+                    if data_dir.exists() {
+                        Some((tenant_id, data_dir))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            let data_dir = rules_dir.join("data");
+            if data_dir.exists() {
+                vec![(self.default_tenant.clone(), data_dir)]
+            } else {
+                vec![]
+            }
+        };
+
+        for (tenant_id, data_dir) in tenant_data_dirs {
+            let entries = match fs::read_dir(&data_dir) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let ext = path.extension().and_then(|e| e.to_str());
+                if ext != Some("json") && ext != Some("yaml") && ext != Some("yml") {
+                    continue;
+                }
+                if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                    keys.insert(self.make_data_key(&tenant_id, name));
+                }
+            }
+        }
+
+        keys
+    }
+
     /// Load a single ruleset from a file
     ///
     /// When signature verification is not needed, deserializes directly to RuleSet

@@ -124,10 +124,7 @@ mod tests {
     fn test_webhook_write_is_blocked() {
         assert!(is_write_request(&Method::POST, "/api/v1/webhooks"));
         assert!(is_write_request(&Method::PUT, "/api/v1/webhooks/wh_123"));
-        assert!(is_write_request(
-            &Method::DELETE,
-            "/api/v1/webhooks/wh_123"
-        ));
+        assert!(is_write_request(&Method::DELETE, "/api/v1/webhooks/wh_123"));
         assert!(!is_write_request(&Method::GET, "/api/v1/webhooks"));
     }
 

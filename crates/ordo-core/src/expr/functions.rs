@@ -164,7 +164,11 @@ impl FunctionRegistry {
             } else {
                 s.len()
             };
-            let result: String = s.chars().skip(start).take(end.saturating_sub(start)).collect();
+            let result: String = s
+                .chars()
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .collect();
             Ok(Value::string(result))
         });
 
@@ -578,7 +582,9 @@ impl FunctionRegistry {
             require_args("contains_any", args, 2)?;
             let arr = require_array("contains_any", &args[0])?;
             let needles = require_array("contains_any", &args[1])?;
-            Ok(Value::bool(needles.iter().any(|needle| arr.contains(needle))))
+            Ok(Value::bool(
+                needles.iter().any(|needle| arr.contains(needle)),
+            ))
         });
 
         // ================================================================
@@ -604,11 +610,7 @@ impl FunctionRegistry {
             require_args("set_intersection", args, 2)?;
             let left = require_array("set_intersection", &args[0])?;
             let right = require_array("set_intersection", &args[1])?;
-            let result: Vec<Value> = left
-                .iter()
-                .filter(|v| right.contains(v))
-                .cloned()
-                .collect();
+            let result: Vec<Value> = left.iter().filter(|v| right.contains(v)).cloned().collect();
             Ok(Value::array(result))
         });
 
@@ -1005,7 +1007,6 @@ impl FunctionRegistry {
         }
         Ok(Value::bool(args[0].is_null()))
     }
-
 }
 
 // ==================== Helper functions ====================
@@ -1416,9 +1417,7 @@ mod tests {
         assert_eq!(u_vals, vec![1, 2, 3, 4]);
 
         // set_intersection
-        let i = r
-            .call("set_intersection", &[a.clone(), b.clone()])
-            .unwrap();
+        let i = r.call("set_intersection", &[a.clone(), b.clone()]).unwrap();
         let mut i_vals: Vec<i64> = i
             .as_array()
             .unwrap()
@@ -1429,9 +1428,7 @@ mod tests {
         assert_eq!(i_vals, vec![2, 3]);
 
         // set_difference
-        let d = r
-            .call("set_difference", &[a.clone(), b.clone()])
-            .unwrap();
+        let d = r.call("set_difference", &[a.clone(), b.clone()]).unwrap();
         assert_eq!(d, Value::array(vec![Value::int(1)]));
 
         // is_subset
@@ -1504,8 +1501,7 @@ mod tests {
         );
 
         // merge
-        let obj2: Value =
-            serde_json::from_value(serde_json::json!({"b": 99, "c": 3})).unwrap();
+        let obj2: Value = serde_json::from_value(serde_json::json!({"b": 99, "c": 3})).unwrap();
         let merged = r.call("merge", &[obj.clone(), obj2]).unwrap();
         assert_eq!(
             r.call("get_or", &[merged.clone(), Value::string("a"), Value::Null])
@@ -1553,9 +1549,7 @@ mod tests {
         assert_eq!(parsed, original);
 
         // json_parse error
-        assert!(r
-            .call("json_parse", &[Value::string("not json")])
-            .is_err());
+        assert!(r.call("json_parse", &[Value::string("not json")]).is_err());
     }
 
     // ================================================================
@@ -1580,9 +1574,7 @@ mod tests {
         assert!(r.call("sqrt", &[Value::int(-1)]).is_err());
 
         // log
-        let ln_e = r
-            .call("log", &[Value::float(std::f64::consts::E)])
-            .unwrap();
+        let ln_e = r.call("log", &[Value::float(std::f64::consts::E)]).unwrap();
         assert!((ln_e.as_float().unwrap() - 1.0).abs() < 1e-10);
         assert!(r.call("log", &[Value::int(0)]).is_err());
     }

@@ -1397,9 +1397,7 @@ pub async fn execute_pipeline(
 /// This is useful when files are deployed externally (e.g. via CI/CD or
 /// config management) and you want immediate reload without waiting for
 /// the file watcher debounce or polling interval.
-pub async fn admin_reload(
-    State(state): State<AppState>,
-) -> ApiResult<Json<serde_json::Value>> {
+pub async fn admin_reload(State(state): State<AppState>) -> ApiResult<Json<serde_json::Value>> {
     let start = Instant::now();
 
     if state.config.rules_dir.is_none() {

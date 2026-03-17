@@ -356,9 +356,7 @@ pub fn set_tenant_rules_count(tenant_id: &str, count: i64) {
 /// Record a hot reload operation (from file watcher or admin API)
 pub fn record_hot_reload(kind: &str, success: bool) {
     let result = if success { "success" } else { "error" };
-    HOT_RELOADS_TOTAL
-        .with_label_values(&[kind, result])
-        .inc();
+    HOT_RELOADS_TOTAL.with_label_values(&[kind, result]).inc();
     if success {
         LAST_RELOAD_TIMESTAMP.set(
             std::time::SystemTime::now()
